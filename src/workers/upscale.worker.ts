@@ -30,48 +30,58 @@ self.addEventListener("message", async (e: MessageEvent) => {
 
   const totalImages = data.images.length as number;
 
+  // transfer된 ArrayBuffer를 먼저 Uint8Array로 복사해두기
+  const imageInputs = data.images.map((imgData: { data: ArrayBuffer; width: number; height: number }) => ({
+    pixels: new Uint8Array(imgData.data).slice(),
+    width: imgData.width,
+    height: imgData.height,
+  }));
+
   for (let idx = 0; idx < totalImages; idx++) {
-    const imgData = data.images[idx];
-    const input = new Img(
-      imgData.width,
-      imgData.height,
-      new Uint8Array(imgData.data)
-    );
+    try {
+      const imgInput = imageInputs[idx];
+      const input = new Img(imgInput.width, imgInput.height, imgInput.pixels);
 
-    const widthOri = input.width;
-    const heightOri = input.height;
-    const tileSize = 128;
-    const factor = 4;
-    const minLap = 12;
+      const widthOri = input.width;
+      const heightOri = input.height;
+      const tileSize = 128;
+      const factor = 4;
+      const minLap = 12;
 
-    input.padToTileSize(tileSize);
-    const withPadding =
-      input.width !== widthOri || input.height !== heightOri;
+      input.padToTileSize(tileSize);
+      const withPadding =
+        input.width !== widthOri || input.height !== heightOri;
 
-    const output = await enlargeImageWithFixedInput(
-      model,
-      input,
-      factor,
-      tileSize,
-      minLap,
-      idx,
-      totalImages
-    );
+      const output = await enlargeImageWithFixedInput(
+        model,
+        input,
+        factor,
+        tileSize,
+        minLap,
+        idx,
+        totalImages
+      );
 
-    if (withPadding) {
-      output.cropToOriginalSize(widthOri * factor, heightOri * factor);
+      if (withPadding) {
+        output.cropToOriginalSize(widthOri * factor, heightOri * factor);
+      }
+
+      self.postMessage(
+        {
+          imageIndex: idx,
+          done: false,
+          output: output.data.buffer,
+          width: output.width,
+          height: output.height,
+        },
+        [output.data.buffer as ArrayBuffer]
+      );
+    } catch (err) {
+      self.postMessage({
+        error: `이미지 ${idx + 1} 처리 중 오류: ${err instanceof Error ? err.message : err}`,
+      });
+      return;
     }
-
-    self.postMessage(
-      {
-        imageIndex: idx,
-        done: false,
-        output: output.data.buffer,
-        width: output.width,
-        height: output.height,
-      },
-      [output.data.buffer as ArrayBuffer]
-    );
   }
 
   self.postMessage({ allDone: true });

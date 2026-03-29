@@ -114,6 +114,11 @@ function App() {
 
       const results: SlideImage[] = new Array(images.length);
 
+      worker.onerror = (e) => {
+        worker.terminate();
+        reject(new Error(e.message || "Worker error"));
+      };
+
       worker.onmessage = (e) => {
         const msg = e.data;
 
